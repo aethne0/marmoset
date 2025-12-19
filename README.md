@@ -1,5 +1,7 @@
 # marmoset
 
+I am learning Go in the most normal way to learn a programming language: write a complex distributed storage system from scratch
+
 **marmoset** is a distributed in-memory key-value database. It has the following properties:
 
 - Supports shared sets, maps, counters and sequences

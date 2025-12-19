@@ -1,55 +1,82 @@
 package main
 
 import (
-	"context"
+	"bufio"
+	"flag"
+	"fmt"
 	"log/slog"
-	protov1 "marmoset/gen/proto/v1"
 	"marmoset/gen/proto/v1/protov1connect"
+	"marmoset/src/cluster"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"connectrpc.com/validate"
-	"github.com/google/uuid"
 	"github.com/lmittmann/tint"
 )
 
-type GreetServer struct{}
-
-func (s *GreetServer) Greet(
-	_ context.Context,
-	req *protov1.GreetMsg,
-) (*protov1.GreetMsg, error) {
-	res := &protov1.GreetMsg{
-		Id:  uuid.New().String(),
-		Uri: "http://localhost:9999",
-	}
-	return res, nil
-}
-
 func main() {
+	uri := flag.String("uri", "", "uri")
+	listen := flag.String("listen", "", "listen")
+	contact := flag.String("contact", "", "contact")
+	flag.Parse()
+
+	// todo validation blah blah blah
+	if strings.Compare("", *uri) == 0 || strings.Compare("", *listen) == 0 {
+		panic("wrong args")
+	}
+
 	slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &tint.Options{
 		Level:      slog.LevelDebug,
 		TimeFormat: time.TimeOnly,
 	})))
 
-	greeter := &GreetServer{}
+	slog.Info("Marmoset!")
+
+	clusterServer := cluster.NewClusterMgr(*uri, *contact)
 	mux := http.NewServeMux()
-	path, handler := protov1connect.NewGossipServiceHandler(
-		greeter,
-		// Validation via Protovalidate is almost always recommended
+	path, handler := protov1connect.NewClusterServiceHandler(
+		clusterServer,
 		connect.WithInterceptors(validate.NewInterceptor()),
 	)
 	mux.Handle(path, handler)
+
 	p := new(http.Protocols)
-	p.SetHTTP2(true)
-	// Use h2c so we can serve HTTP/2 without TLS.
+	p.SetHTTP1(true)
 	p.SetUnencryptedHTTP2(true)
+
 	s := http.Server{
-		Addr:      "localhost:8080",
+		Addr:      *listen,
 		Handler:   mux,
 		Protocols: p,
 	}
-	s.ListenAndServe()
+
+	go s.ListenAndServe()
+	slog.Info(fmt.Sprintf("Listening on: %s - uri: %s", *listen, *uri))
+
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		// temporary debugging repl
+		fmt.Print("> ")
+		if !scanner.Scan() {
+			break // EOF or error
+		}
+		line := strings.TrimSpace(scanner.Text())
+
+		if line == "exit" {
+			fmt.Println("Goodbye!")
+			break
+		} else if line == "peer ls" {
+			peers := clusterServer.ListPeers()
+			fmt.Printf("| Peers (%d)\n", len(peers))
+			for _, p := range peers {
+				fmt.Printf("|   ID: %s\n", p.String())
+			}
+		} else {
+			// process input
+			fmt.Println("Unknown cmd:", line)
+		}
+	}
 }

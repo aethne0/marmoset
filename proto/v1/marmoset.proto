@@ -5,6 +5,8 @@ package proto.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 
+// https://buf.build/bufbuild/protovalidate/docs/main:buf.validate#buf.validate.Violation
+
 message GreetMsg {
   string id = 1 [ (buf.validate.field).string.uuid = true ];
   string uri = 2 [ (buf.validate.field).string.uri = true ];
@@ -19,13 +21,19 @@ message Peer {
 }
 
 message GossipMsg {
-  repeated Peer peers = 1 [ (buf.validate.field) = {
+  // these are values of the resp-er
+  string id = 1 [ (buf.validate.field).string.uuid = true ];
+  string uri = 2 [ (buf.validate.field).string.uri = true ];
+  uint64 counter = 3 [ (buf.validate.field).required = true ];
+  // we dont send our own timestamp, req-er will fill in with local clock
+  repeated Peer peers = 4 [ (buf.validate.field) = {
     required : true,
-    repeated : {min_items : 1, unique : true}
+    // self will always be included, so this is min=1
+    repeated : {unique : true}
   } ];
 }
 
-service GossipService {
+service ClusterService {
   rpc Greet(GreetMsg) returns (GreetMsg) {}
   // rpc Gossip(GossipMsg) returns (GossipMsg) {}
 }
