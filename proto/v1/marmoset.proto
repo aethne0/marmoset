@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package proto.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+message GreetMsg {
+  string id = 1 [ (buf.validate.field).string.uuid = true ];
+  string uri = 2 [ (buf.validate.field).string.uri = true ];
+}
+
+message Peer {
+  string id = 1 [ (buf.validate.field).string.uuid = true ];
+  string uri = 2 [ (buf.validate.field).string.uri = true ];
+  uint64 counter = 3 [ (buf.validate.field).required = true ];
+  google.protobuf.Timestamp lastseen = 4
+      [ (buf.validate.field).required = true ];
+}
+
+message GossipMsg {
+  repeated Peer peers = 1 [ (buf.validate.field) = {
+    required : true,
+    repeated : {min_items : 1, unique : true}
+  } ];
+}
+
+service GossipService {
+  rpc Greet(GreetMsg) returns (GreetMsg) {}
+  // rpc Gossip(GossipMsg) returns (GossipMsg) {}
+}
