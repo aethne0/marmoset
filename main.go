@@ -69,11 +69,13 @@ func main() {
 		if line == "exit" {
 			fmt.Println("Goodbye!")
 			break
-		} else if line == "peer ls" {
+		} else if line == "peers" {
 			clusterServer.ListPeers()
+		} else if line == "cinc" {
+			clusterServer.IncCounter()
 		} else {
 			// process input
-			fmt.Println("Unknown cmd:", line)
+			fmt.Println("VALID CMDS: exit peers cinc")
 		}
 	}
 }

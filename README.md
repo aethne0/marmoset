@@ -23,10 +23,10 @@ symmetrical operation - both nodes send/recv a `GossipMsg` which contains (impor
 ID and Counter for the selected peer, as well as all peers that peer knows of (one will usually
 have more up to date information on one or more peers).
 
-To maintain a sort of lamport-clock we\* also set our counter to `max(our_counter, their_counter)`, under
-the assumption that ALSO the other peer has set their counter to `max(their_counter, max(their_peers_counters))`
-before constructing+sending the GossipMsg. We will have done the same, and so the `max(our_counter, their_counter)`
-will give us the correct highest-seen-counter by either peer.
+To maintain a sort of lamport-clock we\* always set our clock to `max(our_counter, peer_counter)`.
+This will be correct because our counter will always be `max(our_counter, max(our_known_peer_counters))`, so
+we only have to check the newly received counters against our own. The same will be true for the peer, so
+there is no need for us to check the max of all the peers' counters they sent along with their own.
 
 _(we as in: either node in this rpc exchange, again this is a symmetrical RPC call `GossipMsg->GossipMsg`)_
 

@@ -17,8 +17,10 @@ import (
 )
 
 // How long to stop gossiping to peer if they are unseen - if you have tons of peers this would have to be adjusted
-const SLEEP_TIMER time.Duration = time.Duration(15 * time.Second)
-const GOSSIP_INTERVAL time.Duration = time.Duration(1 * time.Second)
+const PEER_TIMOUT time.Duration = time.Duration(15 * time.Second)
+const SLEEPER_INTERVAL time.Duration = time.Duration(5 * time.Second)
+
+const GOSSIP_INTERVAL time.Duration = time.Duration(500 * time.Millisecond)
 
 // TODO
 // we need to handle the case where we have a node with a stale uri, and a new node comes online with
@@ -32,6 +34,7 @@ type ClusterMgr struct {
 	id          uuid.UUID
 	initialized *atomic.Bool
 	uri         string
+	counter     uint64
 }
 
 func NewClusterMgr(uri string, contactUri string) *ClusterMgr {
@@ -46,11 +49,13 @@ func NewClusterMgr(uri string, contactUri string) *ClusterMgr {
 		id:          uuid.New(),
 		initialized: &initialized,
 		uri:         uri,
+		counter:     1, // start at 1 to appease protobuf validation
 	}
 
 	slog.Info("Marmoset!", "id", mgr.id, "uri", uri)
 
 	go mgr.worker(contactUri)
+	go mgr.sleeper()
 
 	return &mgr
 }
@@ -59,19 +64,26 @@ func NewClusterMgr(uri string, contactUri string) *ClusterMgr {
 func (mgr *ClusterMgr) mergeFromGossipMsg(msg *pb.GossipMsg) {
 	g := GossipFromPB(msg)
 	g.Peers = append(g.Peers,
-		Peer{Id: uuid.MustParse(msg.Id), Uri: msg.Uri, Counter: msg.Counter, LastSeen: time.Now()},
+		NewPeer(uuid.MustParse(msg.Id), msg.Uri, msg.Counter, time.Now(), false),
 	)
 	for _, gossPeer := range g.Peers {
+		if gossPeer.Id == mgr.id {
+			continue
+		}
 		index := slices.IndexFunc(mgr.peers, func(p Peer) bool { return p.Id == gossPeer.Id })
 		if index != -1 {
 			mgr.peers[index].Counter = max(mgr.peers[index].Counter, gossPeer.Counter)
 			if gossPeer.LastSeen.After(mgr.peers[index].LastSeen) {
 				mgr.peers[index].LastSeen = gossPeer.LastSeen
 			}
+			mgr.peers[index].Dead = mgr.peers[index].Dead || gossPeer.Dead
 		} else {
 			mgr.peers = append(mgr.peers, gossPeer)
 		}
 	}
+
+	// update our counter to highest seen value by either peer
+	mgr.counter = max(mgr.counter, g.Counter)
 }
 
 // Worker stuff
@@ -109,12 +121,7 @@ func (mgr *ClusterMgr) greet(contactUri string) {
 				mgr.lock.Lock()
 				mgr.peers = append(
 					mgr.peers,
-					Peer{
-						Id:       uuid.MustParse(res.Id),
-						Uri:      res.Uri,
-						Counter:  1,
-						LastSeen: time.Now(),
-					},
+					NewInitPeer(uuid.MustParse(res.Id), res.Uri),
 				)
 				mgr.initialized.Store(true)
 				mgr.lock.Unlock()
@@ -135,18 +142,19 @@ func (mgr *ClusterMgr) greet(contactUri string) {
 func (mgr *ClusterMgr) gossip() {
 	mgr.lock.RLock()
 
-	if len(mgr.peers) == 0 {
+	// select random rPeer
+	eligable := make([]*Peer, 0)
+	for _, p := range mgr.peers {
+		if !p.Dead {
+			eligable = append(eligable, &p)
+		}
+	}
+
+	if len(eligable) == 0 {
 		mgr.lock.RUnlock()
 		return
 	}
 
-	// select random rPeer
-	eligable := make([]*Peer, 0)
-	for _, p := range mgr.peers {
-		if time.Since(p.LastSeen) <= SLEEP_TIMER {
-			eligable = append(eligable, &p)
-		}
-	}
 	rPeer := eligable[rand.Int()%len(eligable)]
 
 	client := mgr.clients[rPeer.Id]
@@ -170,7 +178,7 @@ func (mgr *ClusterMgr) gossip() {
 	msg := &pb.GossipMsg{
 		Id:      mgr.id.String(),
 		Uri:     mgr.uri,
-		Counter: 1, // todo
+		Counter: mgr.counter,
 		Peers:   peers,
 	}
 
@@ -178,7 +186,19 @@ func (mgr *ClusterMgr) gossip() {
 
 	resp, err := client.Gossip(context.Background(), msg)
 	if err != nil {
-		slog.Warn("Couldn't gossip to peer", "err", err)
+		mgr.lock.Lock()
+		index := slices.IndexFunc(mgr.peers, func(p Peer) bool { return p.Id == rPeer.Id })
+		var p *Peer
+		if index > -1 {
+			p = &mgr.peers[index]
+			p.Failed++
+		}
+
+		if p == nil || p.Failed == 1 {
+			slog.Warn("Couldn't gossip to peer", "err", err)
+		}
+		mgr.lock.Unlock()
+
 		return
 	}
 
@@ -188,5 +208,29 @@ func (mgr *ClusterMgr) gossip() {
 	// ? Mutex<T>) )but for Go i dont know
 	mgr.lock.Lock()
 	mgr.mergeFromGossipMsg(resp)
+
+	if resp.Id != rPeer.Id.String() {
+		slog.Warn("Unexpected ID from gossip resp. Presuming dead.", "expected", rPeer.Id.String(), "resp", resp.Id)
+		deadIndex := slices.IndexFunc(mgr.peers, func(p Peer) bool { return p.Id == rPeer.Id })
+		if deadIndex > -1 {
+			mgr.peers[deadIndex].Dead = true
+		}
+	}
 	mgr.lock.Unlock()
+}
+
+func (mgr *ClusterMgr) sleeper() {
+	// we are checking with an RLock first because its very rare well have to do any writes
+	for {
+		mgr.lock.Lock()
+		for i, p := range mgr.peers {
+			if !p.Dead && time.Since(p.LastSeen) > PEER_TIMOUT {
+				mgr.peers[i].Dead = true
+				slog.Info("Presuming node dead", "id", p.Id)
+			}
+		}
+		mgr.lock.Unlock()
+
+		time.Sleep(SLEEPER_INTERVAL)
+	}
 }

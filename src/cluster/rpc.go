@@ -53,7 +53,6 @@ func (mgr *ClusterMgr) Gossip(
 	_ context.Context,
 	req *pb.GossipMsg,
 ) (*pb.GossipMsg, error) {
-
 	mgr.lock.Lock()
 
 	// to send
@@ -69,8 +68,8 @@ func (mgr *ClusterMgr) Gossip(
 
 	resp := &pb.GossipMsg{
 		Id:      mgr.id.String(),
-		Uri:     req.Uri,
-		Counter: 1, // todo
+		Uri:     mgr.uri,
+		Counter: mgr.counter,
 		Peers:   peers,
 	}
 
