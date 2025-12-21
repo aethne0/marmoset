@@ -18,19 +18,19 @@ type Peer struct {
 	Failed   int // failed rpc calls from us, only used for error message throttling
 }
 
-func NewPeer(id uuid.UUID, uri string, counter uint64, lastSeen time.Time, dead bool) Peer {
+func NewPeer(id uuid.UUID, uri string, counter uint64, lastSeen time.Time) Peer {
 	return Peer{
 		Id:       id,
 		Uri:      uri,
 		Counter:  counter,
 		LastSeen: lastSeen,
-		Dead:     dead,
+		Dead:     false,
 		Failed:   0,
 	}
 }
 
 func NewInitPeer(id uuid.UUID, uri string) Peer {
-	return NewPeer(id, uri, 1, time.Now(), false)
+	return NewPeer(id, uri, 1, time.Now())
 }
 
 func PeerFromPB(p *pb.Peer) Peer {
@@ -39,7 +39,6 @@ func PeerFromPB(p *pb.Peer) Peer {
 		p.Uri,                // Validated by pb (required+valid)
 		p.Counter,            // Validated by pb (required)
 		p.Lastseen.AsTime(),  // Validated by pb (required)
-		p.Dead,
 	)
 }
 
@@ -49,7 +48,6 @@ func (p *Peer) ToPB() pb.Peer {
 		Uri:      p.Uri,
 		Counter:  p.Counter,
 		Lastseen: timestamppb.New(p.LastSeen),
-		Dead:     p.Dead,
 	}
 }
 

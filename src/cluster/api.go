@@ -39,8 +39,9 @@ func (mgr *ClusterMgr) ListPeers() {
 
 }
 
-func (mgr *ClusterMgr) IncCounter() {
+func (mgr *ClusterMgr) IncCounter() uint64 {
 	mgr.lock.Lock()
-	mgr.counter++
-	mgr.lock.Unlock()
+	defer mgr.lock.Unlock()
+	mgr.Counter++
+	return mgr.Counter
 }

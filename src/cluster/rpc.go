@@ -43,7 +43,7 @@ func (mgr *ClusterMgr) Greet(
 	slog.Info("Greeted by new peer", "peer-id", id.String(), "peer-uri", req.Uri)
 
 	return &pb.GreetMsg{
-		Id:  mgr.id.String(),
+		Id:  mgr.Id.String(),
 		Uri: mgr.uri,
 	}, nil
 }
@@ -67,9 +67,9 @@ func (mgr *ClusterMgr) Gossip(
 	mgr.lock.Unlock()
 
 	resp := &pb.GossipMsg{
-		Id:      mgr.id.String(),
+		Id:      mgr.Id.String(),
 		Uri:     mgr.uri,
-		Counter: mgr.counter,
+		Counter: mgr.Counter,
 		Peers:   peers,
 	}
 

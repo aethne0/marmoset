@@ -16,7 +16,6 @@ message Peer {
   string id = 1 [ (buf.validate.field).string.uuid = true ];
   string uri = 2 [ (buf.validate.field).string.uri = true ];
   uint64 counter = 3 [ (buf.validate.field).required = true ];
-  bool dead = 5;
 
   google.protobuf.Timestamp lastseen = 4
       [ (buf.validate.field).required = true ];
@@ -27,7 +26,7 @@ message GossipMsg {
   string id = 1 [ (buf.validate.field).string.uuid = true ];
   string uri = 2 [ (buf.validate.field).string.uri = true ];
   uint64 counter = 3 [ (buf.validate.field).required = true ];
-  bool dead = 5;
+
   // we dont send our own timestamp, req-er will fill in with local clock
   repeated Peer peers = 4;
 }
@@ -35,4 +34,35 @@ message GossipMsg {
 service ClusterService {
   rpc Greet(GreetMsg) returns (GreetMsg) {}
   rpc Gossip(GossipMsg) returns (GossipMsg) {}
+}
+
+// state replication
+
+message ORSetAdd {
+  string id = 1 [ (buf.validate.field).string.uuid = true ];
+  uint64 counter = 2 [ (buf.validate.field).required = true ];
+  string key = 3 [ (buf.validate.field).required = true ];
+}
+message ORSetRemove {
+  string id = 1 [ (buf.validate.field).string.uuid = true ];
+  uint64 counter = 2 [ (buf.validate.field).required = true ];
+}
+
+message OrSet {
+  repeated ORSetAdd adds = 1;
+  repeated ORSetRemove removes = 2;
+}
+
+message ReplReq {
+  string id = 1 [ (buf.validate.field).string.uuid = true ];
+  map<string, uint64> vector = 2;
+}
+
+message ReplResp {
+  string id = 1 [ (buf.validate.field).string.uuid = true ];
+  OrSet orset = 2;
+}
+
+service StateService {
+  rpc Repl(ReplReq) returns (ReplResp) {}
 }

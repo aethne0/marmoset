@@ -9,6 +9,22 @@ import (
 	"github.com/google/uuid"
 )
 
+var IDA uuid.UUID = uuid.MustParse("123ad81d-6aa2-432b-b37b-663b63e8ae82")
+var IDB uuid.UUID = uuid.MustParse("abcb52f3-dc77-4e68-9b99-743ab184c899")
+var IDC uuid.UUID = uuid.MustParse("fabd383f-717e-4615-af96-d84412f31abb")
+var IDD uuid.UUID = uuid.MustParse("def49329-e244-43dd-9b41-b172c9fead61")
+var T1 Tag = NewTag(IDA, 1)
+var T2 Tag = NewTag(IDA, 2)
+var T3 Tag = NewTag(IDA, 3)
+
+func TestORSetEmptyContains(t *testing.T) {
+	s := NewOrSet()
+	has := s.Contains("wew")
+	if has {
+		t.Fatalf("Shouldn't contain anything")
+	}
+}
+
 func TestORSetCommutativity(t *testing.T) {
 	// We need 4 sets to test (A + B) vs (B + A) independently
 	s1_a := NewOrSet()
@@ -16,8 +32,8 @@ func TestORSetCommutativity(t *testing.T) {
 	s2_a := NewOrSet()
 	s2_b := NewOrSet()
 
-	t1 := Tag{Id: uuid.New(), Counter: 1}
-	t2 := Tag{Id: uuid.New(), Counter: 2}
+	t1 := NewTag(IDA, 1)
+	t2 := NewTag(IDB, 2)
 
 	// Set up identical states
 	s1_a.Add("x", t1)
@@ -43,7 +59,7 @@ func TestORSetCommutativity(t *testing.T) {
 
 func TestORSetAddContains(t *testing.T) {
 	o := NewOrSet()
-	tag := Tag{Id: uuid.New(), Counter: 1}
+	tag := T1
 	o.Add("foo", tag)
 
 	if !o.Contains("foo") {
@@ -53,7 +69,7 @@ func TestORSetAddContains(t *testing.T) {
 
 func TestORSetRemove(t *testing.T) {
 	o := NewOrSet()
-	tag := Tag{Id: uuid.New(), Counter: 1}
+	tag := T1
 	o.Add("foo", tag)
 	o.Remove("foo")
 
@@ -64,7 +80,7 @@ func TestORSetRemove(t *testing.T) {
 
 func TestORSetIdempotentAdd(t *testing.T) {
 	o := NewOrSet()
-	tag := Tag{Id: uuid.New(), Counter: 1}
+	tag := T1
 
 	o.Add("bar", tag)
 	o.Add("bar", tag) // duplicate add
@@ -77,7 +93,7 @@ func TestORSetIdempotentAdd(t *testing.T) {
 
 func TestORSetIdempotentRemove(t *testing.T) {
 	o := NewOrSet()
-	tag := Tag{Id: uuid.New(), Counter: 1}
+	tag := T1
 	o.Add("baz", tag)
 	o.Remove("baz")
 	o.Remove("baz") // duplicate remove
@@ -91,8 +107,8 @@ func TestORSetCommutativity2(t *testing.T) {
 	o1 := NewOrSet()
 	o2 := NewOrSet()
 
-	t1 := Tag{Id: uuid.New(), Counter: 1}
-	t2 := Tag{Id: uuid.New(), Counter: 2}
+	t1 := T1
+	t2 := T2
 
 	o1.Add("x", t1)
 	o2.Add("x", t2)
@@ -114,9 +130,9 @@ func TestORSetAssociativity(t *testing.T) {
 	// Helper to create a pre-filled set
 	setup := func() (*ORSet, *ORSet, *ORSet) {
 		a, b, c := NewOrSet(), NewOrSet(), NewOrSet()
-		a.Add("a", Tag{uuid.New(), 1})
-		b.Add("b", Tag{uuid.New(), 2})
-		c.Add("c", Tag{uuid.New(), 3})
+		a.Add("a", T1)
+		b.Add("b", T2)
+		c.Add("c", T3)
 		return a, b, c
 	}
 
@@ -144,8 +160,8 @@ func TestORSetConcurrentAddRemove(t *testing.T) {
 	o1 := NewOrSet()
 	o2 := NewOrSet()
 
-	t1 := Tag{Id: uuid.New(), Counter: 1}
-	t2 := Tag{Id: uuid.New(), Counter: 2}
+	t1 := T1
+	t2 := T2
 
 	o1.Add("x", t1)
 	o1.Remove("x") // remove before o2 adds
@@ -170,8 +186,8 @@ func TestORSetConcurrentAddRemove(t *testing.T) {
 func TestORSetMultipleTags(t *testing.T) {
 	o := NewOrSet()
 
-	t1 := Tag{Id: uuid.New(), Counter: 1}
-	t2 := Tag{Id: uuid.New(), Counter: 2}
+	t1 := T1
+	t2 := T2
 
 	o.Add("val", t1)
 	o.Add("val", t2)
@@ -182,7 +198,7 @@ func TestORSetMultipleTags(t *testing.T) {
 	o = NewOrSet()
 	o.Add("val", t1)
 	o.Add("val", t2)
-	o.removes.Add(t1) // simulate removing only t1
+	o.removes.ReplaceOrInsert(t1) // simulate removing only t1
 
 	if !o.Contains("val") {
 		t.Fatal("expected val to exist since t2 is not removed")
@@ -191,8 +207,8 @@ func TestORSetMultipleTags(t *testing.T) {
 
 func TestORSetReAdd(t *testing.T) {
 	o := NewOrSet()
-	t1 := Tag{Id: uuid.New(), Counter: 1}
-	t2 := Tag{Id: uuid.New(), Counter: 2}
+	t1 := T1
+	t2 := T2
 
 	o.Add("a", t1)
 	o.Remove("a")
@@ -205,7 +221,7 @@ func TestORSetReAdd(t *testing.T) {
 
 func TestORSetMergeEmpty(t *testing.T) {
 	o1 := NewOrSet()
-	o1.Add("a", Tag{Id: uuid.New(), Counter: 1})
+	o1.Add("a", T1)
 	o2 := NewOrSet()
 
 	o1.Merge(o2)
@@ -217,7 +233,7 @@ func TestORSetMergeEmpty(t *testing.T) {
 func TestORSetConcurrentRemovals(t *testing.T) {
 	o1 := NewOrSet()
 	o2 := NewOrSet()
-	tag := Tag{Id: uuid.New(), Counter: 1}
+	tag := T1
 
 	o1.Add("x", tag)
 	o2.Merge(o1)
@@ -235,8 +251,8 @@ func TestORSetRemoveDoesNotAffectConcurrentAdd(t *testing.T) {
 	o1 := NewOrSet()
 	o2 := NewOrSet()
 
-	t1 := Tag{Id: uuid.New(), Counter: 1}
-	t2 := Tag{Id: uuid.New(), Counter: 2}
+	t1 := T1
+	t2 := T2
 
 	o1.Add("x", t1)
 
@@ -256,9 +272,9 @@ func TestORSetMultiItemConvergence(t *testing.T) {
 	o1 := NewOrSet()
 	o2 := NewOrSet()
 
-	o1.Add("a", Tag{uuid.New(), 1})
-	o2.Add("b", Tag{uuid.New(), 2})
-	o1.Add("c", Tag{uuid.New(), 3})
+	o1.Add("a", T1)
+	o2.Add("b", T2)
+	o1.Add("c", T3)
 	o2.Remove("a") // o2 hasn't seen "a", so this should do nothing
 
 	o1.Merge(o2)
@@ -281,23 +297,21 @@ func TestORSetComplexSequence(t *testing.T) {
 	nodes = append(nodes, n2)
 	nodes = append(nodes, n3)
 
-	ids := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
-
 	// 1. Node 0 adds "data" @ 1
-	nodes[0].Add("data", Tag{ids[0], 1})
+	nodes[0].Add("data", NewTag(IDA, 1))
 
 	// 2. Node 1 adds "data" @ 1 (Concurrent)
-	nodes[1].Add("data", Tag{ids[1], 1})
+	nodes[1].Add("data", NewTag(IDB, 1))
 
 	// 3. Node 0 merges Node 1, then removes "data" (removes both tags)
 	nodes[0].Merge(nodes[1])
 	nodes[0].Remove("data")
 
 	// 4. Node 2 adds "data" @ 1 (Concurrent to the removal)
-	nodes[2].Add("data", Tag{ids[2], 1})
+	nodes[2].Add("data", NewTag(IDC, 1))
 
 	// 5. Node 1 adds "data" @ 2 (Sequential to its first add)
-	nodes[1].Add("data", Tag{ids[1], 2})
+	nodes[1].Add("data", NewTag(IDB, 2))
 
 	// Final Merge All
 	for i := range 3 {
@@ -313,10 +327,9 @@ func TestORSetComplexSequence(t *testing.T) {
 
 func TestORSetTransitiveMerge(t *testing.T) {
 	n1, n2, n3 := NewOrSet(), NewOrSet(), NewOrSet()
-	id := uuid.New()
 
 	// n1 adds and merges to all
-	n1.Add("sync", Tag{id, 1})
+	n1.Add("sync", T1)
 	n2.Merge(n1)
 	n3.Merge(n2)
 
@@ -338,18 +351,16 @@ func TestORSetNetworkPartition(t *testing.T) {
 	// Group B
 	n3, n4 := NewOrSet(), NewOrSet()
 
-	u := []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
-
 	// --- Phase 1: Partitioned ---
 	// Group A adds and removes "apple"
-	n1.Add("apple", Tag{u[0], 1})
+	n1.Add("apple", T1)
 	n2.Merge(n1)
 	n2.Remove("apple") // n2 sees n1's tag and removes it
 	n1.Merge(n2)       // Group A is synced: "apple" is gone
 
 	// Group B independently adds "apple" and "banana"
-	n3.Add("apple", Tag{u[2], 1}) // Concurrent add to Group A's remove
-	n4.Add("banana", Tag{u[3], 1})
+	n3.Add("apple", T2) // Concurrent add to Group A's remove
+	n4.Add("banana", T3)
 	n3.Merge(n4)
 	n4.Merge(n3) // Group B is synced
 
@@ -385,24 +396,24 @@ func TestORSetNetworkPartition(t *testing.T) {
 func TestORSetHighChurnConvergence(t *testing.T) {
 	// Assuming NewOrSet returns *ORSet
 	n1, n2, n3 := NewOrSet(), NewOrSet(), NewOrSet()
-	u1, u2, u3 := uuid.New(), uuid.New(), uuid.New()
 
 	// --- Step 1: Sequential updates on N1 ---
-	n1.Add("key1", Tag{u1, 1})
-	n1.Add("key1", Tag{u1, 2})
-	n1.Add("key2", Tag{u1, 3})
+	n1.Add("key1", NewTag(IDA, 1))
+	n1.Add("key1", NewTag(IDA, 2))
+	n1.Add("key2", NewTag(IDA, 3))
 	// --- Step 2: Concurrent work on N2 & N3 ---
-	n2.Add("key1", Tag{u2, 1})
+	n2.Add("key1", NewTag(IDB, 1))
 	n2.Remove("key1") // N2 removes its Tag{u2, 1}
-	n3.Add("key3", Tag{u3, 1})
-	n3.Add("key1", Tag{u3, 2})
+	n3.Add("key3", NewTag(IDC, 1))
+	n3.Add("key1", NewTag(IDC, 2))
 	// --- Step 3: Partial Sync ---
 	n1.Merge(n2)
 	// --- Step 4: More Churn ---
-	n1.Add("key2", Tag{u1, 4})
+	n1.Add("key2", NewTag(IDA, 4))
 	n1.Remove("key2") // Removes {u1, 1} and {u1, 2}
-	n2.Add("key4", Tag{u2, 2})
+	n2.Add("key4", NewTag(IDB, 2))
 	n3.Remove("key3") // Removes {u3, 1}
+
 	// --- Step 5: Global Sync ---
 	// Using a slice of pointers to ensure we are modifying the original sets
 	allNodes := []*ORSet{n1, n2, n3}

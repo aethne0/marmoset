@@ -1,44 +1,48 @@
 package crdt
 
 import (
+	"encoding/hex"
 	"fmt"
-	"slices"
 	"strings"
 
+	"github.com/google/btree"
 	"github.com/google/uuid"
 )
 
-type Tag struct {
-	Id      uuid.UUID
-	Counter uint64
+type Tag string
+
+func idstr(id uuid.UUID) string {
+	var buf [32]byte
+	hex.Encode(buf[:], id[:])
+	return string(buf[:])
+
+}
+func NewTag(id uuid.UUID, counter uint64) Tag {
+	return Tag(fmt.Sprintf("%s-%016x", idstr(id), counter))
+}
+
+func tagLess(a, b Tag) bool {
+	return a < b
+}
+
+func newBTree() *btree.BTreeG[Tag] {
+	bt := btree.NewG(2, tagLess)
+	return bt
 }
 
 // OR-Set (set)
+// todo these should be sorted for more efficient tag>vvector retrieval
 
 type ORSet struct {
-	adds    map[string]*Set[Tag]
-	removes *Set[Tag]
+	adds    map[string]*btree.BTreeG[Tag]
+	removes *btree.BTreeG[Tag]
 }
 
 func NewOrSet() *ORSet {
 	return &ORSet{
-		adds:    map[string]*Set[Tag]{},
-		removes: NewSet[Tag](),
+		adds:    make(map[string]*btree.BTreeG[Tag]),
+		removes: newBTree(),
 	}
-}
-
-func cmpSets(a Tag, b Tag) int {
-	if a.Id == b.Id && a.Counter == b.Counter {
-		return 0
-	}
-	if a.Id == b.Id {
-		if a.Counter < b.Counter {
-			return -1
-		} else {
-			return 1
-		}
-	}
-	return strings.Compare(a.Id.String(), b.Id.String())
 }
 
 func (o *ORSet) String() string {
@@ -46,78 +50,90 @@ func (o *ORSet) String() string {
 
 	s.WriteString("ORSet----------------------------------------------------\n")
 	s.WriteString("|--Adds:\n")
-	for k, v := range o.adds {
-		s.WriteString(fmt.Sprintf("| |--%s\n", k))
-		vv := v.Entries()
-		slices.SortFunc(vv, cmpSets)
-		for _, vvv := range vv {
-			s.WriteString(fmt.Sprintf("| |  |--%s:%d\n", strings.Split(vvv.Id.String(), "-")[0], vvv.Counter))
-		}
-	}
-	s.WriteString("|--Removes:\n")
-	v := o.removes.Entries()
-	slices.SortFunc(v, cmpSets)
-	for _, v := range v {
-		s.WriteString(fmt.Sprintf("| |--%s:%d\n", strings.Split(v.Id.String(), "-")[0], v.Counter))
+	for key, tags := range o.adds {
+		s.WriteString(fmt.Sprintf("| |--%s\n", key))
+		tags.Ascend(func(tag Tag) bool {
+			s.WriteString(fmt.Sprintf("| |  |--%s\n", tag))
+			return true
+		})
 	}
 
+	s.WriteString("|--Removes:\n")
+	o.removes.Ascend(func(tag Tag) bool {
+		s.WriteString(fmt.Sprintf("| |-----%s\n", tag))
+		return true
+	})
 	s.WriteString("-----------------------------------------------------------")
 
 	return s.String()
 }
 
-func (o *ORSet) Add(value string, tag Tag) {
-	s, has := o.adds[value]
+func (o *ORSet) Add(key string, tag Tag) {
+	atags, has := o.adds[key]
 	if !has {
-		s = NewSet[Tag]()
-		o.adds[value] = s
+		atags = newBTree()
+		o.adds[key] = atags
 	}
 
-	s.Add(tag)
+	atags.ReplaceOrInsert(tag)
 }
 
-func (o *ORSet) Remove(value string) {
-	_, has := o.adds[value]
+func (o *ORSet) Remove(key string) {
+	_, has := o.adds[key]
 	if has {
-		for _, tag := range o.adds[value].Entries() {
-			o.removes.Add(tag)
-		}
+		o.adds[key].Ascend(func(tag Tag) bool {
+			o.removes.ReplaceOrInsert(tag)
+			return true
+		})
 	}
 }
 
-func (o *ORSet) Contains(value string) bool {
-	for _, tag := range o.adds[value].Entries() {
-		if removed := o.removes.Has(tag); !removed {
+func (o *ORSet) Contains(key string) bool {
+	atags, has := o.adds[key]
+	if !has {
+		return false
+	}
+
+	contains := false
+	atags.Ascend(func(tag Tag) bool {
+		if !o.removes.Has(tag) {
+			contains = true
+			return false
+		} else {
 			return true
 		}
-	}
-	return false
+	})
+
+	return contains
 }
 
 func (o *ORSet) Merge(other *ORSet) {
 	for value, otherTags := range other.adds {
 		if _, has := o.adds[value]; !has {
-			o.adds[value] = NewSet[Tag]()
+			o.adds[value] = newBTree()
 		}
-		for _, tag := range otherTags.Entries() {
-			o.adds[value].Add(tag)
-		}
+		otherTags.Ascend(func(tag Tag) bool {
+			o.adds[value].ReplaceOrInsert(tag)
+			return true
+		})
 	}
 
-	for _, tag := range other.removes.Entries() {
-		o.removes.Add(tag)
-	}
+	other.removes.Ascend(func(tag Tag) bool {
+		o.removes.ReplaceOrInsert(tag)
+		return true
+	})
 }
 
 func (o *ORSet) Items() []string {
 	var result []string
 	for value, tags := range o.adds {
-		for _, tag := range tags.Entries() {
+		tags.Ascend(func(tag Tag) bool {
 			if !o.removes.Has(tag) {
 				result = append(result, value)
-				break
+				return false
 			}
-		}
+			return true
+		})
 	}
 	return result
 }
