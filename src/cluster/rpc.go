@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	pb "marmoset/gen/proto/v1"
-	"marmoset/src/assert"
 	"slices"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// Greet endpoint
 func (mgr *ClusterMgr) Greet(
 	_ context.Context,
 	req *pb.GreetMsg,
@@ -35,7 +35,7 @@ func (mgr *ClusterMgr) Greet(
 		Peer{
 			Id:       id,
 			Uri:      req.Uri,
-			Counter:  0,
+			Counter:  1,
 			LastSeen: time.Now(),
 		},
 	)
@@ -48,10 +48,31 @@ func (mgr *ClusterMgr) Greet(
 	}, nil
 }
 
+// Gossip endpoint
 func (mgr *ClusterMgr) Gossip(
 	_ context.Context,
 	req *pb.GossipMsg,
 ) (*pb.GossipMsg, error) {
-	assert.Todo()
-	return nil, nil
+
+	mgr.lock.Lock()
+
+	// to send
+	peers := make([]*pb.Peer, 0, len(mgr.peers))
+
+	for i := range mgr.peers {
+		pbPeer := mgr.peers[i].ToPB()
+		peers = append(peers, &pbPeer)
+	}
+
+	mgr.mergeFromGossipMsg(req)
+	mgr.lock.Unlock()
+
+	resp := &pb.GossipMsg{
+		Id:      mgr.id.String(),
+		Uri:     req.Uri,
+		Counter: 1, // todo
+		Peers:   peers,
+	}
+
+	return resp, nil
 }

@@ -33,8 +33,6 @@ func main() {
 		TimeFormat: time.TimeOnly,
 	})))
 
-	slog.Info("Marmoset!")
-
 	clusterServer := cluster.NewClusterMgr(*uri, *contact)
 	mux := http.NewServeMux()
 	path, handler := protov1connect.NewClusterServiceHandler(
@@ -69,11 +67,7 @@ func main() {
 			fmt.Println("Goodbye!")
 			break
 		} else if line == "peer ls" {
-			peers := clusterServer.ListPeers()
-			fmt.Printf("| Peers (%d)\n", len(peers))
-			for _, p := range peers {
-				fmt.Printf("|   ID: %s\n", p.String())
-			}
+			clusterServer.ListPeers()
 		} else {
 			// process input
 			fmt.Println("Unknown cmd:", line)

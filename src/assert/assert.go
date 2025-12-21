@@ -11,7 +11,7 @@ import (
 
 type pair struct {
 	label string
-	value any
+	value any // maybe theres a Display/Debug trait
 }
 
 var titleStyle = color.New(color.Bold, color.FgBlack, color.BgHiRed)

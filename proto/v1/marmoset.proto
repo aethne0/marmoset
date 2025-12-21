@@ -16,6 +16,7 @@ message Peer {
   string id = 1 [ (buf.validate.field).string.uuid = true ];
   string uri = 2 [ (buf.validate.field).string.uri = true ];
   uint64 counter = 3 [ (buf.validate.field).required = true ];
+
   google.protobuf.Timestamp lastseen = 4
       [ (buf.validate.field).required = true ];
 }
@@ -26,14 +27,10 @@ message GossipMsg {
   string uri = 2 [ (buf.validate.field).string.uri = true ];
   uint64 counter = 3 [ (buf.validate.field).required = true ];
   // we dont send our own timestamp, req-er will fill in with local clock
-  repeated Peer peers = 4 [ (buf.validate.field) = {
-    required : true,
-    // self will always be included, so this is min=1
-    repeated : {unique : true}
-  } ];
+  repeated Peer peers = 4;
 }
 
 service ClusterService {
   rpc Greet(GreetMsg) returns (GreetMsg) {}
-  // rpc Gossip(GossipMsg) returns (GossipMsg) {}
+  rpc Gossip(GossipMsg) returns (GossipMsg) {}
 }
