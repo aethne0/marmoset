@@ -53,14 +53,14 @@ func (o *ORSet) String() string {
 	for key, tags := range o.adds {
 		s.WriteString(fmt.Sprintf("| |--%s\n", key))
 		tags.Ascend(func(tag Tag) bool {
-			s.WriteString(fmt.Sprintf("| |  |--%s\n", tag))
+			fmt.Fprintf(&s, "| |  |--%s\n", tag)
 			return true
 		})
 	}
 
 	s.WriteString("|--Removes:\n")
 	o.removes.Ascend(func(tag Tag) bool {
-		s.WriteString(fmt.Sprintf("| |-----%s\n", tag))
+		fmt.Fprintf(&s, "| |-----%s\n", tag)
 		return true
 	})
 	s.WriteString("-----------------------------------------------------------")
