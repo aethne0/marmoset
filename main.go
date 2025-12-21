@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"marmoset/gen/proto/v1/protov1connect"
 	"marmoset/src/cluster"
+	"marmoset/src/state"
 	"net/http"
 	"os"
 	"strings"
@@ -34,6 +35,8 @@ func main() {
 	})))
 
 	clusterServer := cluster.NewClusterMgr(*uri, *contact)
+	state.NewState(clusterServer)
+
 	mux := http.NewServeMux()
 	path, handler := protov1connect.NewClusterServiceHandler(
 		clusterServer,

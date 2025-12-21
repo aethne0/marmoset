@@ -55,7 +55,7 @@ func NewClusterMgr(uri string, contactUri string) *ClusterMgr {
 	return &mgr
 }
 
-// must be called with lock
+// Must be called with write-lock
 func (mgr *ClusterMgr) mergeFromGossipMsg(msg *pb.GossipMsg) {
 	g := GossipFromPB(msg)
 	g.Peers = append(g.Peers,
