@@ -19,7 +19,7 @@ import (
 // How long to stop gossiping to peer if they are unseen - if you have tons of peers this would have to be adjusted
 const PEER_TIMOUT time.Duration = time.Duration(15 * time.Second)
 const SLEEPER_INTERVAL time.Duration = time.Duration(5 * time.Second)
-const GOSSIP_INTERVAL time.Duration = time.Duration(500 * time.Millisecond)
+const GOSSIP_INTERVAL time.Duration = time.Duration(20 * time.Millisecond)
 
 // TODO
 // we need to handle the case where we have a node with a stale uri, and a new node comes online with
@@ -135,9 +135,10 @@ func (mgr *ClusterMgr) greet(contactUri string) {
 	}
 }
 
-// Gossip worker
-func (mgr *ClusterMgr) gossip() {
+// ill fix this to work with a wlock eventually? maybe?
+func (mgr *ClusterMgr) GetLivePeer() *Peer {
 	mgr.lock.RLock()
+	defer mgr.lock.RUnlock()
 
 	// select random rPeer
 	eligable := make([]*Peer, 0)
@@ -148,11 +149,21 @@ func (mgr *ClusterMgr) gossip() {
 	}
 
 	if len(eligable) == 0 {
-		mgr.lock.RUnlock()
+		return nil
+	}
+
+	return eligable[rand.Int()%len(eligable)]
+}
+
+// Gossip worker
+func (mgr *ClusterMgr) gossip() {
+
+	rPeer := mgr.GetLivePeer() // doesnt matter if its removed by the time we go
+	if rPeer == nil {
 		return
 	}
 
-	rPeer := eligable[rand.Int()%len(eligable)]
+	mgr.lock.RLock()
 
 	client := mgr.clients[rPeer.Id]
 	if client == nil {

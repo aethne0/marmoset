@@ -39,14 +39,10 @@ service ClusterService {
 // state replication
 
 message ORSetAdd {
-  string id = 1 [ (buf.validate.field).string.uuid = true ];
-  uint64 counter = 2 [ (buf.validate.field).required = true ];
-  string key = 3 [ (buf.validate.field).required = true ];
+  string tag = 1;
+  string key = 2 [ (buf.validate.field).required = true ];
 }
-message ORSetRemove {
-  string id = 1 [ (buf.validate.field).string.uuid = true ];
-  uint64 counter = 2 [ (buf.validate.field).required = true ];
-}
+message ORSetRemove { string tag = 1; } // could validate
 
 message OrSet {
   repeated ORSetAdd adds = 1;
@@ -60,9 +56,10 @@ message ReplReq {
 
 message ReplResp {
   string id = 1 [ (buf.validate.field).string.uuid = true ];
+  map<string, uint64> vector = 3;
   OrSet orset = 2;
 }
 
 service StateService {
-  rpc Repl(ReplReq) returns (ReplResp) {}
+  rpc Replicate(ReplReq) returns (ReplResp) {}
 }

@@ -7,8 +7,14 @@ import (
 	"time"
 )
 
-func (mgr *ClusterMgr) ListPeers() {
+func (mgr *ClusterMgr) PrintListPeers() {
 	mgr.lock.RLock()
+
+	slog.Debug(fmt.Sprintf("Self | id=%s uri=%s c=%d",
+		mgr.Id.String(),
+		mgr.uri,
+		mgr.Counter,
+	))
 
 	slog.Debug("Alive")
 	for _, p := range mgr.peers {

@@ -1,8 +1,12 @@
+// CRDT types
 package crdt
 
 import (
 	"encoding/hex"
 	"fmt"
+	"log/slog"
+	pb "marmoset/gen/proto/v1"
+	"strconv"
 	"strings"
 
 	"github.com/google/btree"
@@ -18,7 +22,7 @@ func idstr(id uuid.UUID) string {
 
 }
 func NewTag(id uuid.UUID, counter uint64) Tag {
-	return Tag(fmt.Sprintf("%s-%016x", idstr(id), counter))
+	return Tag(fmt.Sprintf("%s%016x", idstr(id), counter))
 }
 
 func tagLess(a, b Tag) bool {
@@ -38,7 +42,7 @@ type ORSet struct {
 	removes *btree.BTreeG[Tag]
 }
 
-func NewOrSet() *ORSet {
+func NewORSet() *ORSet {
 	return &ORSet{
 		adds:    make(map[string]*btree.BTreeG[Tag]),
 		removes: newBTree(),
@@ -136,4 +140,78 @@ func (o *ORSet) Items() []string {
 		})
 	}
 	return result
+}
+
+func ORSetToPB(o *ORSet) *pb.OrSet {
+	adds := make([]*pb.ORSetAdd, 0)
+	for k, v := range o.adds {
+		v.Ascend(func(tag Tag) bool {
+			adds = append(adds, &pb.ORSetAdd{Key: k, Tag: string(tag)})
+			return true
+		})
+	}
+
+	removes := make([]*pb.ORSetRemove, 0)
+	o.removes.Ascend(func(tag Tag) bool {
+		removes = append(removes, &pb.ORSetRemove{Tag: string(tag)})
+		return true
+	})
+
+	return &pb.OrSet{
+		Adds:    adds,
+		Removes: removes,
+	}
+}
+
+func ORSetFromPB(pb *pb.OrSet) *ORSet {
+	o := NewORSet()
+	for _, t := range pb.Adds {
+		o.Add(t.Key, Tag(t.Tag))
+	}
+	for _, t := range pb.Removes {
+		o.removes.ReplaceOrInsert(Tag(t.Tag))
+	}
+	return o
+}
+
+func ORSetToPBDiff(
+	o *ORSet,
+	peerVector map[uuid.UUID]uint64,
+) *pb.OrSet {
+
+	adds := make([]*pb.ORSetAdd, 0)
+	for k, v := range o.adds {
+		v.Ascend(func(tag Tag) bool {
+			// todo we should send these as bytes really maybe
+			id := uuid.MustParse(string(tag[:32]))
+			ctr, _ := strconv.ParseUint(string(tag[32:]), 16, 64)
+			entry, has := peerVector[id]
+
+			if !has || entry < ctr {
+				adds = append(adds, &pb.ORSetAdd{Key: k, Tag: string(tag)})
+			}
+
+			return true
+		})
+	}
+
+	removes := make([]*pb.ORSetRemove, 0)
+	o.removes.Ascend(func(tag Tag) bool {
+		id := uuid.MustParse(string(tag[:32]))
+		ctr, _ := strconv.ParseUint(string(tag[32:]), 16, 64)
+		entry, has := peerVector[id]
+
+		if !has || entry < ctr {
+			removes = append(removes, &pb.ORSetRemove{Tag: string(tag)})
+		}
+
+		return true
+	})
+
+	slog.Debug("removes", ">", removes)
+
+	return &pb.OrSet{
+		Adds:    adds,
+		Removes: removes,
+	}
 }

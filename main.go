@@ -9,6 +9,7 @@ import (
 	"marmoset/src/cluster"
 	"marmoset/src/state"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 
 func main() {
 	uri := flag.String("uri", "", "uri")
+	pprof := flag.String("pprof", "", "pprof")
 	listen := flag.String("listen", "", "listen")
 	contact := flag.String("contact", "", "contact")
 	flag.Parse()
@@ -35,7 +37,7 @@ func main() {
 	})))
 
 	clusterServer := cluster.NewClusterMgr(*uri, *contact)
-	state.NewState(clusterServer)
+	stateMgr := state.NewStateMgr(clusterServer)
 
 	mux := http.NewServeMux()
 	path, handler := protov1connect.NewClusterServiceHandler(
@@ -43,6 +45,11 @@ func main() {
 		connect.WithInterceptors(validate.NewInterceptor()),
 	)
 	mux.Handle(path, handler)
+	pathState, handlerState := protov1connect.NewStateServiceHandler(
+		stateMgr,
+		connect.WithInterceptors(validate.NewInterceptor()),
+	)
+	mux.Handle(pathState, handlerState)
 
 	p := new(http.Protocols)
 	p.SetHTTP1(true)
@@ -54,7 +61,9 @@ func main() {
 		Protocols: p,
 	}
 
+	go http.ListenAndServe(*pprof, nil)
 	go s.ListenAndServe()
+
 	slog.Info(fmt.Sprintf("Listening on: %s - uri: %s", *listen, *uri))
 
 	scanner := bufio.NewScanner(os.Stdin)
@@ -70,12 +79,34 @@ func main() {
 			fmt.Println("Goodbye!")
 			break
 		} else if line == "peers" {
-			clusterServer.ListPeers()
+			clusterServer.PrintListPeers()
 		} else if line == "cinc" {
 			clusterServer.IncCounter()
+		} else if line == "orset" {
+			stateMgr.PrintORSet()
+		} else if line == "vec" {
+			stateMgr.PrintVector()
+		} else if line == "pvec" {
+			stateMgr.PrintPeerVectors()
+		} else if strings.Split(line, " ")[0] == "put" {
+			k := strings.Split(line, " ")[1]
+			stateMgr.SetInsert(k)
+			fmt.Printf("put: %s\n", k)
+		} else if strings.Split(line, " ")[0] == "del" {
+			k := strings.Split(line, " ")[1]
+			stateMgr.SetRemove(k)
+			fmt.Printf("del: %s\n", k)
+		} else if strings.Split(line, " ")[0] == "get" {
+			k := strings.Split(line, " ")[1]
+			has := stateMgr.SetHas(k)
+			if has {
+				fmt.Printf("get %s: TRUE\n", k)
+			} else {
+				fmt.Printf("get %s: FALSE\n", k)
+			}
 		} else {
 			// process input
-			fmt.Println("VALID CMDS: exit peers cinc")
+			fmt.Println("VALID CMDS:\nexit, peers, cinc, put [key], get [key], orset, vec, pvec")
 		}
 	}
 }
