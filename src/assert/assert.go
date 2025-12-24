@@ -49,6 +49,10 @@ func makeMsg(typeString string, msg string, pairs []pair) string {
 
 }
 
+func Unreachable(msg string) {
+	panic(makeMsg("Unreachable", msg, []pair{}))
+}
+
 func True(condition bool, msg string) {
 	if !condition {
 		panic(makeMsg("True", msg, []pair{}))
