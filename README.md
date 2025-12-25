@@ -4,10 +4,10 @@ I am learning Go in the most normal way to learn a programming language: write a
 
 **marmoset** is a distributed in-memory key-value database. It has the following properties:
 
+- SWIM + Phi-accrual based membership/liveness
 - Supports CRDT-based sets, maps, counters and sequences
 - Eventually-consistent
 - In-memory (for now)
-- Gossip-based cluster membership
 
 <p align="center">
   <img src="https://monke.ca/assets/marmo_set.webp" alt="Marmo-Set"/>
